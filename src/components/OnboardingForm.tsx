@@ -1,13 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, type KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ChevronRight, ChevronLeft, Check, User, Car, DollarSign, MapPin, Target } from 'lucide-react';
+import { User, Car, DollarSign, MapPin, Target, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { onboardingSchema, type OnboardingData } from '../lib/schema';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-// Utility pour le styling Tailwind
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
@@ -23,142 +22,168 @@ const steps = [
 export default function OnboardingForm() {
     const [currentStep, setCurrentStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [direction, setDirection] = useState(1);
 
-    const {
-        register,
-        handleSubmit,
-        trigger,
-        formState: { errors },
-    } = useForm<OnboardingData>({
-        resolver: zodResolver(onboardingSchema),
-        mode: 'onChange',
+    // États pour stocker les badges créés
+    const [tagInputs, setTagInputs] = useState({
+        critical: [] as string[],
+        languages: [] as string[],
+        services: [] as string[]
     });
 
-    const nextStep = async () => {
-        let fieldsToValidate: (keyof OnboardingData)[] = [];
+    // États INDIVIDUELS pour le texte en cours de saisie
+    const [tagTexts, setTagTexts] = useState({
+        critical: "",
+        languages: "",
+        services: ""
+    });
 
-        // Mapping des validations par étape (Source de vérité: schema.ts)
-        switch (currentStep) {
-            case 1:
-                fieldsToValidate = ['firstName', 'lastName', 'email', 'companyName', 'vehicleCategory', 'passengerCapacity', 'luggageCapacity'];
-                break;
-            case 2:
-                fieldsToValidate = ['currentChannel', 'bookingLeadTime', 'criticalInfo', 'validationMode'];
-                break;
-            case 3:
-                fieldsToValidate = ['pricingModel', 'paymentTiming'];
-                break;
-            case 4:
-                fieldsToValidate = ['serviceArea', 'breakManagement', 'multiStopPolicy', 'idealClientProfile'];
-                break;
-            case 5:
-                fieldsToValidate = ['cancellationPolicy', 'painPoints'];
-                break;
-        }
+    const { register, handleSubmit, trigger, watch, setValue, formState: { errors } } = useForm<OnboardingData>({
+        resolver: zodResolver(onboardingSchema),
+        mode: 'onChange',
+        defaultValues: { langues: [], premiumServices: [], criticalInfo: [] }
+    });
 
-        const isValid = await trigger(fieldsToValidate);
-        if (isValid) {
-            setDirection(1);
-            setCurrentStep((prev) => Math.min(prev + 1, steps.length));
+    const watchCriticals = watch("criticalInfo") || [];
+    const watchLangues = watch("langues") || [];
+    const watchServices = watch("premiumServices") || [];
+
+    const handleTagAdd = (e: KeyboardEvent<HTMLInputElement>, category: keyof typeof tagInputs, fieldName: any) => {
+        const currentText = tagTexts[category];
+
+        if ((e.key === 'Enter' || e.key === ',') && currentText.trim()) {
+            e.preventDefault();
+            const val = currentText.trim().replace(/,$/, '');
+            if (!tagInputs[category].includes(val)) {
+                const newTags = [...tagInputs[category], val];
+                setTagInputs(prev => ({ ...prev, [category]: newTags }));
+                setValue(fieldName, newTags.join(', '));
+            }
+            // On vide seulement le texte de CETTE catégorie
+            setTagTexts(prev => ({ ...prev, [category]: "" }));
         }
     };
 
-    const prevStep = () => {
-        setDirection(-1);
-        setCurrentStep((prev) => Math.max(prev - 1, 1));
+    const removeTag = (index: number, category: keyof typeof tagInputs, fieldName: any) => {
+        const newTags = tagInputs[category].filter((_, i) => i !== index);
+        setTagInputs(prev => ({ ...prev, [category]: newTags }));
+        setValue(fieldName, newTags.join(', '));
+    };
+
+    const nextStep = async () => {
+        let fields: (keyof OnboardingData)[] = [];
+        switch (currentStep) {
+            case 1: fields = ['firstName', 'lastName', 'email', 'companyName', 'vehicleCategory', 'passengerCapacity', 'luggageCapacity']; break;
+            case 2: fields = ['currentChannel', 'bookingLeadTime', 'criticalInfo', 'otherCriticalInfo', 'validationMode']; break;
+            case 3: fields = ['pricingModel', 'tarif_4h', 'tarif_8h', 'km_inclus', 'prix_km_supp', 'acompte_percent', 'paymentTiming']; break;
+            case 4: fields = ['serviceArea', 'langues', 'otherLanguage', 'interet_tourisme', 'tarifs_fixes_aeroport', 'breakManagement', 'multiStopPolicy', 'premiumServices', 'otherService', 'idealClientProfile', 'realTimeTracking', 'loyaltyAccount']; break;
+            case 5: fields = ['cancellationPolicy', 'painPoints']; break;
+        }
+        if (await trigger(fields)) {
+            setDirection(1);
+            setCurrentStep(prev => prev + 1);
+            setErrorMessage(null); // Clear error on step change
+        } else {
+            setErrorMessage("Veuillez remplir correctement tous les champs obligatoires avant de continuer.");
+        }
     };
 
     const onSubmit = async (data: OnboardingData) => {
         setIsSubmitting(true);
+        setErrorMessage(null);
         try {
-            // TRANSFORMATION : On traduit le Frontend (CamelCase) vers ton Directus (Snake_case)
-            const payload = {
-                status: "draft",
-                prenom: data.firstName,
-                nom: data.lastName,
-                email: data.email,
-                nom_entreprise: data.companyName,
-                categorie_vehicule: data.vehicleCategory,
-                capacite_passagers: data.passengerCapacity,
-                capacite_bagages: data.luggageCapacity,
-                zone_intervention: data.serviceArea,
-                besoin_facturation: data.invoiceNeeds,
-                point_noir_admin: data.painPoints,
-                // On peut ajouter les autres si ton n8n les attend :
-                options_bord: data.premiumServices,
-                delai_prevenance: data.bookingLeadTime
-            };
-
-            const response = await fetch('https://n8n.remyparis.com/webhook-test/onboarding-vtc', {
+            const response = await fetch('/api/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(data),
             });
 
-            if (!response.ok) throw new Error('Erreur de transmission vers n8n');
+            const responseText = await response.text();
+            let responseData;
 
-            alert('Dossier envoyé avec succès !');
-        } catch (error) {
+            try {
+                responseData = JSON.parse(responseText);
+            } catch (e) {
+                console.error("Non-JSON response:", responseText);
+                throw new Error(`Erreur serveur (Format invalide): ${responseText.substring(0, 50)}...`);
+            }
+
+            if (!response.ok) {
+                throw new Error(responseData.message || `Erreur ${response.status}: ${responseData.error || 'Inconnue'}`);
+            }
+
+            setIsSuccess(true);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        } catch (error: any) {
             console.error(error);
-            alert('Une erreur est survenue lors de l\'envoi.');
+            setErrorMessage(error.message || "Une erreur est survenue lors de l'envoi.");
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const variants = {
-        enter: (direction: number) => ({ x: direction > 0 ? 50 : -50, opacity: 0, scale: 0.95 }),
-        center: { x: 0, opacity: 1, scale: 1 },
-        exit: (direction: number) => ({ x: direction < 0 ? 50 : -50, opacity: 0, scale: 0.95 }),
-    };
+    if (isSuccess) {
+        return (
+            <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden min-h-[500px] flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
+                    <CheckCircle className="w-10 h-10 text-green-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-2">Candidature transmise !</h2>
+                <p className="text-slate-500 max-w-md mb-8">
+                    Nous avons bien reçu votre dossier. Vous pouvez encore modifier vos réponses si vous avez oublié un détail.
+                </p>
+                <div className="flex gap-4">
+                    <button
+                        onClick={() => setIsSuccess(false)}
+                        className="px-6 py-2.5 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors"
+                    >
+                        Rectifier ma réponse
+                    </button>
+                    {/* Optionnel : Bouton pour recharger/finir */}
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-6 py-2.5 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-colors"
+                    >
+                        Fermer
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            {/* Progress Bar */}
+            {/* Header */}
             <div className="bg-slate-50 px-8 py-6 border-b border-slate-100">
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-slate-900 rounded-lg">
                             {React.createElement(steps[currentStep - 1].icon, { className: "w-5 h-5 text-white" })}
                         </div>
-                        <h2 className="text-xl font-semibold text-slate-800 tracking-tight">
-                            {steps[currentStep - 1].title}
-                        </h2>
+                        <h2 className="text-xl font-semibold text-slate-800">{steps[currentStep - 1].title}</h2>
                     </div>
-                    <span className="text-sm font-medium text-slate-500">
-                        {currentStep} / {steps.length}
-                    </span>
+                    <span className="text-sm font-medium text-slate-500">{currentStep} / 5</span>
                 </div>
-                <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                    <motion.div
-                        className="h-full bg-slate-900 rounded-full"
-                        animate={{ width: `${(currentStep / steps.length) * 100}%` }}
-                        transition={{ duration: 0.5 }}
-                    />
+                <div className="h-1.5 w-full bg-slate-200 rounded-full">
+                    <motion.div className="h-full bg-slate-900 rounded-full" animate={{ width: `${(currentStep / 5) * 100}%` }} />
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="p-8 min-h-[450px] flex flex-col justify-between">
+            <form onSubmit={handleSubmit(onSubmit)} className="p-8 min-h-[500px] flex flex-col justify-between">
                 <AnimatePresence mode="wait" custom={direction}>
-                    <motion.div
-                        key={currentStep}
-                        custom={direction}
-                        variants={variants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                        className="space-y-6 flex-grow"
-                    >
-                        {/* ETAPE 1 */}
+                    <motion.div key={currentStep} initial={{ x: direction > 0 ? 30 : -30, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: direction < 0 ? 30 : -30, opacity: 0 }} className="space-y-6">
+
+                        {/* STEP 1 */}
                         {currentStep === 1 && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <InputField label="Prénom" name="firstName" register={register} error={errors.firstName} />
                                 <InputField label="Nom" name="lastName" register={register} error={errors.lastName} />
                                 <InputField label="Email Pro" name="email" type="email" register={register} error={errors.email} className="md:col-span-2" />
-                                <InputField label="Nom de la Société" name="companyName" register={register} error={errors.companyName} className="md:col-span-2" />
-                                <SelectField label="Catégorie Véhicule" name="vehicleCategory" register={register} error={errors.vehicleCategory} options={['Berline', 'Business', 'Van', 'VIP']} />
+                                <InputField label="Société" name="companyName" register={register} error={errors.companyName} className="md:col-span-2" />
+                                <SelectField label="Véhicule" name="vehicleCategory" register={register} options={['Berline', 'Business', 'Van', 'VIP']} error={errors.vehicleCategory} />
                                 <div className="grid grid-cols-2 gap-4">
                                     <InputField label="Passagers" name="passengerCapacity" type="number" register={register} error={errors.passengerCapacity} />
                                     <InputField label="Valises" name="luggageCapacity" type="number" register={register} error={errors.luggageCapacity} />
@@ -166,96 +191,183 @@ export default function OnboardingForm() {
                             </div>
                         )}
 
-                        {/* ETAPE 2 */}
+                        {/* STEP 2 */}
                         {currentStep === 2 && (
                             <div className="space-y-6">
-                                <SelectField label="Canal de réservation principal" name="currentChannel" register={register} error={errors.currentChannel} options={['Appel', 'SMS', 'WhatsApp', 'Email', 'Autre']} />
-                                <SelectField label="Délai minimum (Anticipation)" name="bookingLeadTime" register={register} error={errors.bookingLeadTime} options={['H-2', 'H-24', '48h', '1 semaine']} />
-                                <InputField label="3 infos clés pour valider" name="criticalInfo" register={register} error={errors.criticalInfo} placeholder="ex: Lieu, Date, Type de vol" />
-                                <SelectField label="Mode de validation" name="validationMode" register={register} error={errors.validationMode} options={['Manuelle', 'Automatique']} />
+                                <SelectField label="Canal principal" name="currentChannel" register={register} options={['Appel', 'SMS', 'WhatsApp', 'Email', 'Autre']} error={errors.currentChannel} />
+                                <div className="space-y-3">
+                                    <label className="text-sm font-medium text-slate-700">Checklist Validation</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['Lieu de charge', 'Destination', 'Nom Passager', 'Vol/Train', 'Autres'].map(i => (
+                                            <CheckboxField key={i} label={i} value={i} name="criticalInfo" register={register} />
+                                        ))}
+                                    </div>
+                                    {errors.criticalInfo && <span className="text-xs text-red-500">{errors.criticalInfo.message}</span>}
+                                    {watchCriticals.includes("Autres") && (
+                                        <TagInput
+                                            tags={tagInputs.critical}
+                                            value={tagTexts.critical}
+                                            onChange={(val: string) => setTagTexts(prev => ({ ...prev, critical: val }))}
+                                            onKeyDown={(e: any) => handleTagAdd(e, 'critical', 'otherCriticalInfo')}
+                                            onRemove={(i: number) => removeTag(i, 'critical', 'otherCriticalInfo')}
+                                            placeholder="Ex: Siège bébé, Pancarte (Entrée)"
+                                        />
+                                    )}
+                                </div>
+                                <SelectField label="Délai Prévenance" name="bookingLeadTime" register={register} options={['H-2', 'H-24', '48h', '1 semaine']} error={errors.bookingLeadTime} />
+                                <SelectField label="Mode Validation" name="validationMode" register={register} options={['Manuelle', 'Automatique']} error={errors.validationMode} />
                             </div>
                         )}
 
-                        {/* ETAPE 3 */}
+                        {/* STEP 3 */}
                         {currentStep === 3 && (
                             <div className="space-y-6">
-                                <SelectField label="Modèle de prix" name="pricingModel" register={register} error={errors.pricingModel} options={['Forfait Horaire', 'Forfait Journée', 'Mixte']} />
-                                <InputField label="Frais supplémentaires (Parking...)" name="extraFees" register={register} error={errors.extraFees} />
-                                <SelectField label="Moment du paiement" name="paymentTiming" register={register} error={errors.paymentTiming} options={['100% commande', '30% acompte', 'Paiement à bord']} />
-                                <CheckboxField label="Besoin de facture PDF avec TVA ?" name="invoiceNeeds" register={register} />
+                                <SelectField label="Modèle de prix" name="pricingModel" register={register} options={['Forfait Horaire', 'Forfait Journée', 'Mixte']} error={errors.pricingModel} />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <InputField label="Tarif 4h (€)" name="tarif_4h" type="number" register={register} error={errors.tarif_4h} />
+                                    <InputField label="Tarif 8h (€)" name="tarif_8h" type="number" register={register} error={errors.tarif_8h} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <InputField label="KM inclus" name="km_inclus" type="number" register={register} error={errors.km_inclus} />
+                                    <InputField label="Prix KM supp (€)" name="prix_km_supp" type="number" register={register} step="0.1" error={errors.prix_km_supp} />
+                                </div>
+                                <InputField label="Acompte (%)" name="acompte_percent" type="number" register={register} error={errors.acompte_percent} />
+                                <SelectField label="Paiement" name="paymentTiming" register={register} options={['100% commande', '30% acompte', 'Paiement à bord']} error={errors.paymentTiming} />
                             </div>
                         )}
 
-                        {/* ETAPE 4 */}
+                        {/* STEP 4 */}
                         {currentStep === 4 && (
                             <div className="space-y-6">
-                                <SelectField label="Zone d'intervention" name="serviceArea" register={register} error={errors.serviceArea} options={['Paris Intramuros', 'Île-de-France', 'France Entière']} />
-                                <InputField label="Gestion des pauses ?" name="breakManagement" register={register} error={errors.breakManagement} isTextArea />
-                                <SelectField label="Politique Multi-Stop" name="multiStopPolicy" register={register} error={errors.multiStopPolicy} options={['Inclus', 'Sur devis', 'Interdit']} />
-                                <InputField label="Votre client idéal ?" name="idealClientProfile" register={register} error={errors.idealClientProfile} isTextArea />
+                                <SelectField label="Zone" name="serviceArea" register={register} options={['Paris Intramuros', 'Île-de-France', 'France Entière']} error={errors.serviceArea} />
+                                <div className="space-y-3">
+                                    <label className="text-sm font-medium text-slate-700">Langues</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {['Français', 'Anglais', 'Espagnol', 'Autres'].map(l => (
+                                            <CheckboxField key={l} label={l} value={l} name="langues" register={register} />
+                                        ))}
+                                    </div>
+                                    {errors.langues && <span className="text-xs text-red-500">{errors.langues.message}</span>}
+                                    {watchLangues.includes("Autres") && (
+                                        <TagInput
+                                            tags={tagInputs.languages}
+                                            value={tagTexts.languages}
+                                            onChange={(val: string) => setTagTexts(prev => ({ ...prev, languages: val }))}
+                                            onKeyDown={(e: any) => handleTagAdd(e, 'languages', 'otherLanguage')}
+                                            onRemove={(i: number) => removeTag(i, 'languages', 'otherLanguage')}
+                                            placeholder="Ajouter une langue..."
+                                        />
+                                    )}
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-sm font-medium text-slate-700">Services</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {['Eau', 'Wifi', 'Presse', 'Autres'].map(s => (
+                                            <CheckboxField key={s} label={s} value={s} name="premiumServices" register={register} />
+                                        ))}
+                                    </div>
+                                    {watchServices.includes("Autres") && (
+                                        <TagInput
+                                            tags={tagInputs.services}
+                                            value={tagTexts.services}
+                                            onChange={(val: string) => setTagTexts(prev => ({ ...prev, services: val }))}
+                                            onKeyDown={(e: any) => handleTagAdd(e, 'services', 'otherService')}
+                                            onRemove={(i: number) => removeTag(i, 'services', 'otherService')}
+                                            placeholder="Précisez..."
+                                        />
+                                    )}
+                                </div>
+
+                                <InputField label="Note intérêt touristique (0 à 5)" name="interet_tourisme" type="number" register={register} error={errors.interet_tourisme} />
+                                <CheckboxField label="Tarifs fixes Aéroport ?" name="tarifs_fixes_aeroport" register={register} />
+                                <InputField label="Gestion des pauses" name="breakManagement" register={register} isTextArea error={errors.breakManagement} />
+                                <SelectField label="Politique arrêts multiples" name="multiStopPolicy" register={register} options={['Inclus', 'Sur devis', 'Interdit']} error={errors.multiStopPolicy} />
+                                <CheckboxField label="Suivi temps réel" name="realTimeTracking" register={register} />
+                                <CheckboxField label="Compte fidélité" name="loyaltyAccount" register={register} />
+                                <InputField label="Client idéal" name="idealClientProfile" register={register} isTextArea error={errors.idealClientProfile} />
                             </div>
                         )}
 
-                        {/* ETAPE 5 */}
+                        {/* STEP 5 */}
                         {currentStep === 5 && (
                             <div className="space-y-6">
-                                <SelectField label="Politique d'annulation" name="cancellationPolicy" register={register} error={errors.cancellationPolicy} options={['Annulation Flexible (24h)', 'Annulation Stricte (48h)', 'Non remboursable']} />
-                                <CheckboxField label="Retard client facturé (après 30min) ?" name="latePolicy" register={register} />
-                                <CheckboxField label="Droit de sous-traiter ?" name="subcontracting" register={register} />
-                                <InputField label="Le point bloquant dans ton orga ?" name="painPoints" register={register} error={errors.painPoints} isTextArea placeholder="Détaillez vos difficultés administratives..." />
+                                <SelectField label="Annulation" name="cancellationPolicy" register={register} options={['Annulation Flexible (24h)', 'Annulation Stricte (48h)', 'Non remboursable']} error={errors.cancellationPolicy} />
+                                <CheckboxField label="Retard facturé" name="latePolicy" register={register} />
+                                <CheckboxField label="Sous-traitance" name="subcontracting" register={register} />
+                                <InputField label="Pain Points (Orga)" name="painPoints" register={register} isTextArea error={errors.painPoints} />
                             </div>
                         )}
                     </motion.div>
                 </AnimatePresence>
 
-                {/* Navigation Buttons */}
-                <div className="flex justify-between pt-6 mt-6 border-t border-slate-100">
-                    <button type="button" onClick={prevStep} disabled={currentStep === 1} className={cn("flex items-center px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors", currentStep === 1 && "invisible")}>
-                        <ChevronLeft className="w-4 h-4 mr-1" /> Retour
-                    </button>
-
-                    {currentStep < steps.length ? (
-                        <button type="button" onClick={nextStep} className="flex items-center px-6 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10">
-                            Suivant <ChevronRight className="w-4 h-4 ml-2" />
-                        </button>
-                    ) : (
-                        <button type="submit" disabled={isSubmitting} className="flex items-center px-6 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-600/10">
-                            {isSubmitting ? 'Envoi...' : 'Valider mon dossier'} {!isSubmitting && <Check className="w-4 h-4 ml-2" />}
-                        </button>
+                {/* Footer */}
+                <div className="flex flex-col gap-4 mt-6 border-t border-slate-100 pt-6">
+                    {errorMessage && (
+                        <div className="p-4 rounded-xl bg-red-50 border border-red-100 text-red-600 flex items-center gap-3 animate-pulse">
+                            <div className="shrink-0"><AlertCircle className="w-5 h-5" /></div>
+                            <p className="text-sm font-medium">{errorMessage}</p>
+                        </div>
                     )}
+
+                    <div className="flex justify-between">
+                        <button type="button" onClick={() => { setDirection(-1); setCurrentStep(s => s - 1); }} disabled={currentStep === 1} className={cn("px-4 py-2 text-slate-400", currentStep === 1 && "invisible")}>Retour</button>
+                        {currentStep < 5 ? (
+                            <button type="button" onClick={nextStep} className="px-6 py-2.5 bg-slate-900 text-white rounded-xl">Suivant</button>
+                        ) : (
+                            <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors">{isSubmitting ? 'Envoi...' : 'Valider'}</button>
+                        )}
+                    </div>
                 </div>
             </form>
         </div>
     );
 }
 
-// COMPOSANTS ATOMIQUES INTERNES
-const InputField = ({ label, name, register, error, type = "text", className, isTextArea = false, placeholder }: any) => (
+// COMPOSANTS REUTILISABLES
+const TagInput = ({ tags, value, onChange, onKeyDown, onRemove, placeholder }: any) => (
+    <div className="flex flex-wrap gap-2 p-2 border border-slate-200 rounded-xl bg-white focus-within:ring-2 focus-within:ring-slate-900 transition-all">
+        {tags.map((tag: string, i: number) => (
+            <span key={i} className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg">
+                {tag}
+                <X className="w-3 h-3 cursor-pointer hover:text-red-500" onClick={() => onRemove(i)} />
+            </span>
+        ))}
+        <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={tags.length === 0 ? placeholder : ""}
+            className="flex-1 min-w-[120px] outline-none text-sm p-1"
+        />
+    </div>
+);
+
+const InputField = ({ label, name, register, error, type = "text", isTextArea = false, className, step }: any) => (
     <div className={cn("flex flex-col space-y-1.5", className)}>
         <label className="text-sm font-medium text-slate-700">{label}</label>
         {isTextArea ? (
-            <textarea {...register(name)} className={cn("px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 outline-none transition-all min-h-[100px]", error && "border-red-500")} placeholder={placeholder} />
+            <textarea {...register(name)} className="px-4 py-2 border border-slate-200 rounded-xl text-sm min-h-[100px] outline-none focus:ring-2 focus:ring-slate-900" />
         ) : (
-            <input {...register(name, { valueAsNumber: type === 'number' })} type={type} className={cn("px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 outline-none transition-all", error && "border-red-500")} placeholder={placeholder} />
+            <input {...register(name, { valueAsNumber: type === 'number' })} type={type} step={step} className="px-4 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900" />
         )}
-        {error && <span className="text-xs text-red-500 mt-1 font-medium">{error.message}</span>}
+        {error && <span className="text-xs text-red-500">{error.message}</span>}
     </div>
 );
 
-const SelectField = ({ label, name, register, error, options }: any) => (
+const SelectField = ({ label, name, register, options, error }: any) => (
     <div className="flex flex-col space-y-1.5">
         <label className="text-sm font-medium text-slate-700">{label}</label>
-        <select {...register(name)} className={cn("px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 outline-none transition-all appearance-none cursor-pointer", error && "border-red-500")}>
+        <select {...register(name)} className="px-4 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 appearance-none bg-white">
             <option value="">Sélectionner...</option>
-            {options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
+            {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
         </select>
-        {error && <span className="text-xs text-red-500 mt-1 font-medium">{error.message}</span>}
+        {error && <span className="text-xs text-red-500">{error.message}</span>}
     </div>
 );
 
-const CheckboxField = ({ label, name, register }: any) => (
-    <label className="flex items-center space-x-3 p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer">
-        <input type="checkbox" {...register(name)} className="h-5 w-5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
-        <span className="text-sm font-medium text-slate-700">{label}</span>
+const CheckboxField = ({ label, name, register, value }: any) => (
+    <label className="flex items-center space-x-3 p-3 border border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+        <input type="checkbox" value={value} {...register(name)} className="h-4 w-4 text-slate-900 rounded border-slate-300 focus:ring-slate-900" />
+        <span className="text-sm text-slate-700 font-medium">{label}</span>
     </label>
 );
