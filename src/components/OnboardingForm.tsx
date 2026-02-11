@@ -337,7 +337,7 @@ const TagInput = ({ tags, value, onChange, onKeyDown, onRemove, placeholder }: a
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder={tags.length === 0 ? placeholder : ""}
-            className="flex-1 min-w-[120px] outline-none text-sm p-1"
+            className="flex-1 min-w-[120px] outline-none text-base md:text-sm p-1"
         />
     </div>
 );
@@ -346,9 +346,9 @@ const InputField = ({ label, name, register, error, type = "text", isTextArea = 
     <div className={cn("flex flex-col space-y-1.5", className)}>
         <label className="text-sm font-medium text-slate-700">{label}</label>
         {isTextArea ? (
-            <textarea {...register(name)} className="px-4 py-2 border border-slate-200 rounded-xl text-sm min-h-[100px] outline-none focus:ring-2 focus:ring-slate-900" />
+            <textarea {...register(name)} className="px-4 py-2 border border-slate-200 rounded-xl text-base md:text-sm min-h-[100px] outline-none focus:ring-2 focus:ring-slate-900" />
         ) : (
-            <input {...register(name, { valueAsNumber: type === 'number' })} type={type} step={step} className="px-4 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900" />
+            <input {...register(name, { valueAsNumber: type === 'number' })} type={type} step={step} className="px-4 py-2 border border-slate-200 rounded-xl text-base md:text-sm outline-none focus:ring-2 focus:ring-slate-900" />
         )}
         {error && <span className="text-xs text-red-500">{error.message}</span>}
     </div>
@@ -357,7 +357,7 @@ const InputField = ({ label, name, register, error, type = "text", isTextArea = 
 const SelectField = ({ label, name, register, options, error }: any) => (
     <div className="flex flex-col space-y-1.5">
         <label className="text-sm font-medium text-slate-700">{label}</label>
-        <select {...register(name)} className="px-4 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 appearance-none bg-white">
+        <select {...register(name)} className="px-4 py-2 border border-slate-200 rounded-xl text-base md:text-sm outline-none focus:ring-2 focus:ring-slate-900 appearance-none bg-white">
             <option value="">Sélectionner...</option>
             {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
         </select>
