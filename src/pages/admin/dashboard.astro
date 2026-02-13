@@ -1,0 +1,872 @@
+---
+// /home/mike/projects/vtc/vtc-questions/src/pages/admin/dashboard.astro
+export const prerender = false;
+
+import Layout from "../../layouts/Layout.astro";
+import Table from "../../components/Table.astro";
+import {
+    DirectusClient,
+    type OnboardingEntry,
+    type Entreprise,
+    type Hub,
+} from "../../lib/directus";
+import { isAuthenticated } from "../../lib/auth";
+
+// Protection de la route
+const sessionCookie = Astro.cookies.get("admin_session");
+const auth = isAuthenticated(Astro.cookies);
+
+if (!auth) {
+    return Astro.redirect("/admin");
+}
+
+const directus = new DirectusClient();
+let pendingPartners: OnboardingEntry[] = [];
+let soloEntreprises: Entreprise[] = [];
+let teamEntreprises: Entreprise[] = [];
+let hubs: Hub[] = [];
+let error: string | null = null;
+
+try {
+    pendingPartners = await directus.getOnboardingByStatus("pending");
+    if (pendingPartners.length === 0) {
+        pendingPartners = await directus.getOnboardingByStatus("draft");
+    }
+    soloEntreprises = await directus.getEntreprisesSolo();
+    teamEntreprises = await directus.getEntreprisesEquipe();
+    hubs = await directus.getHubs();
+} catch (e) {
+    error = "Erreur de connexion à Directus";
+    console.error(e);
+}
+
+const pendingColumns = [
+    { key: "identity", label: "Identité // Email" },
+    { key: "nom_entreprise", label: "Entreprise" },
+    { key: "details", label: "Véhicule" },
+    { key: "hub", label: "Hub Applied" },
+    { key: "actions", label: "Actions", align: "right" as const },
+];
+
+const soloColumns = [
+    { key: "identity", label: "Nom // Email" },
+    { key: "account_type", label: "Type" },
+    { key: "created_at", label: "Date Inscr." },
+    { key: "actions", label: "Actions", align: "right" as const },
+];
+
+const teamColumns = [
+    { key: "nom", label: "Nom Équipe / Entreprise" },
+    { key: "hub_id", label: "ID Hub" },
+    { key: "account_type", label: "Type" },
+    { key: "actions", label: "Actions", align: "right" as const },
+];
+---
+
+<Layout title="Admin Console | VTC Core">
+    <main
+        class="min-h-screen bg-[#0a0a0a] text-gray-300 font-mono text-sm p-4 md:p-8"
+    >
+        <!-- Header Technique -->
+        <header
+            class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-gray-800 pb-6"
+        >
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-3 h-3 bg-blue-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                >
+                </div>
+                <div>
+                    <h1
+                        class="text-xl font-bold tracking-tighter text-white uppercase"
+                    >
+                        VTC_CORE // MGMT_CONSOLE
+                    </h1>
+                    <p
+                        class="text-[10px] text-gray-500 mt-1 uppercase tracking-widest"
+                    >
+                        System Status: Optimal // Operator: Admin
+                    </p>
+                </div>
+            </div>
+            <div
+                class="flex flex-col md:flex-row gap-4 items-end md:items-center w-full md:w-auto"
+            >
+                <div class="relative w-full md:w-64 group">
+                    <input
+                        type="text"
+                        id="globalSearch"
+                        placeholder="RECHERCHER_GLOBAL..."
+                        class="w-full bg-gray-900/50 border border-gray-800 px-4 py-2 text-xs focus:border-blue-500 focus:outline-none transition-all placeholder:text-gray-700"
+                    />
+                    <div
+                        class="absolute right-3 top-2.5 text-gray-700 group-focus-within:text-blue-500 transition-colors"
+                    >
+                        🔍
+                    </div>
+                </div>
+                <button
+                    id="logoutBtn"
+                    class="bg-red-950/20 text-red-500 border border-red-900/50 px-4 py-2 hover:bg-red-500 hover:text-white transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                    LOGOUT // EXIT
+                </button>
+            </div>
+        </header>
+
+        {
+            error && (
+                <div class="bg-red-950/20 border border-red-900 text-red-400 p-4 mb-6 flex items-center gap-3 animate-shake">
+                    <span class="font-bold text-lg">!</span>
+                    <p class="uppercase text-xs font-bold leading-none">
+                        {error}
+                    </p>
+                </div>
+            )
+        }
+
+        <!-- Tab Navigation -->
+        <nav class="flex gap-2 mb-6 border-b border-gray-900 pb-px">
+            <button
+                class="tab-btn active px-6 py-3 text-[10px] font-bold uppercase tracking-widest transition-all border-b-2 border-blue-500 text-white bg-white/5"
+                data-tab="pending"
+            >
+                En attente <span class="ml-2 text-gray-500"
+                    >[{pendingPartners.length}]</span
+                >
+            </button>
+            <button
+                class="tab-btn px-6 py-3 text-[10px] font-bold uppercase tracking-widest transition-all border-b-2 border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                data-tab="solos"
+            >
+                Solos <span class="ml-2 text-gray-700"
+                    >[{soloEntreprises.length}]</span
+                >
+            </button>
+            <button
+                class="tab-btn px-6 py-3 text-[10px] font-bold uppercase tracking-widest transition-all border-b-2 border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                data-tab="teams"
+            >
+                Équipes <span class="ml-2 text-gray-700"
+                    >[{teamEntreprises.length}]</span
+                >
+            </button>
+        </nav>
+
+        <!-- Tab Content: Pending -->
+        <div id="tab-pending" class="tab-content">
+            <Table columns={pendingColumns} id="table-pending">
+                {
+                    pendingPartners.length === 0 ? (
+                        <tr class="empty-row text-center">
+                            <td
+                                colspan={pendingColumns.length}
+                                class="p-12 text-gray-600 italic uppercase text-[10px]"
+                            >
+                                No pending applications found.
+                            </td>
+                        </tr>
+                    ) : (
+                        pendingPartners.map((p) => (
+                            <tr
+                                class="border-b border-gray-900 hover:bg-blue-900/5 transition-colors group"
+                                id={`row-${p.id}`}
+                                data-search={`${p.prenom} ${p.nom} ${p.email} ${p.nom_entreprise}`}
+                            >
+                                <td class="p-4">
+                                    <div class="font-bold text-white uppercase">
+                                        {p.prenom} {p.nom}
+                                    </div>
+                                    <div class="text-[10px] text-gray-500 mt-1">
+                                        {p.email}
+                                    </div>
+                                </td>
+                                <td class="p-4 uppercase text-gray-400 font-bold">
+                                    {p.nom_entreprise}
+                                </td>
+                                <td class="p-4">
+                                    <div class="text-[10px] text-gray-400">
+                                        {p.categorie_vehicule}
+                                    </div>
+                                    <div class="font-mono text-[10px] text-gray-600 mt-0.5">
+                                        {p.immatriculation || "NO_PLATE"}
+                                    </div>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 bg-blue-900/10 border border-blue-900/30 text-blue-400 text-[9px] font-bold">
+                                        {p.applied_hub_code || "GENERIC_POOL"}
+                                    </span>
+                                </td>
+                                <td class="p-4">
+                                    <div class="flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            class="doc-btn px-3 py-1 bg-gray-800 hover:bg-gray-700 text-[9px] font-bold uppercase"
+                                            data-id={p.id}
+                                            data-files={JSON.stringify({
+                                                assurance: p.assurance_file,
+                                                carte_pro: p.carte_pro_file,
+                                                rib: p.rib_file,
+                                                carte_grise: p.immatriculation
+                                                    ? "LINK_EXIST"
+                                                    : null, // immatriculation used here
+                                            })}
+                                        >
+                                            DOCS
+                                        </button>
+                                        <button
+                                            class="manage-btn px-3 py-1 bg-blue-900/20 text-blue-400 border border-blue-900/50 hover:bg-blue-500 hover:text-white text-[9px] font-bold uppercase transition-all"
+                                            data-id={p.id}
+                                            data-name={`${p.prenom} ${p.nom}`}
+                                            data-entreprise={p.nom_entreprise}
+                                            data-hub-code={p.applied_hub_code}
+                                        >
+                                            Gérer
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))
+                    )
+                }
+            </Table>
+        </div>
+
+        <!-- Tab Content: Solos -->
+        <div id="tab-solos" class="tab-content hidden">
+            <Table columns={soloColumns} id="table-solos">
+                {
+                    soloEntreprises.length === 0 ? (
+                        <tr class="empty-row text-center">
+                            <td
+                                colspan={soloColumns.length}
+                                class="p-12 text-gray-600 italic uppercase text-[10px]"
+                            >
+                                No solo businesses found.
+                            </td>
+                        </tr>
+                    ) : (
+                        soloEntreprises.map((e) => (
+                            <tr
+                                class="border-b border-gray-900 hover:bg-white/5 transition-colors group"
+                                id={`row-${e.id}`}
+                                data-search={`${e.nom_legal} ${e.email}`}
+                            >
+                                <td class="p-4">
+                                    <div class="font-bold text-white uppercase">
+                                        {e.nom_legal}
+                                    </div>
+                                    <div class="text-[10px] text-gray-500 mt-1">
+                                        {e.email || "N/A"}
+                                    </div>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 bg-gray-800 text-gray-400 text-[9px] font-bold uppercase">
+                                        Solo
+                                    </span>
+                                </td>
+                                <td class="p-4 text-[10px] text-gray-500">
+                                    {e.created_at
+                                        ? new Date(
+                                              e.created_at,
+                                          ).toLocaleDateString()
+                                        : "N/A"}
+                                </td>
+                                <td class="p-4">
+                                    <div class="flex justify-end gap-2 items-center">
+                                        <span class="text-[9px] text-gray-600 uppercase font-bold mr-2">
+                                            Transférer:
+                                        </span>
+                                        <select
+                                            class="transfer-hub-select bg-gray-900 border border-gray-800 text-[9px] text-gray-400 px-2 py-1 focus:border-blue-500 focus:outline-none"
+                                            data-id={e.id}
+                                        >
+                                            <option value="">
+                                                -- CHOISIR ÉQUIPE --
+                                            </option>
+                                            {hubs.map((h) => (
+                                                <option value={h.id}>
+                                                    {h.nom}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))
+                    )
+                }
+            </Table>
+        </div>
+
+        <!-- Tab Content: Teams -->
+        <div id="tab-teams" class="tab-content hidden">
+            <Table columns={teamColumns} id="table-teams">
+                {
+                    teamEntreprises.length === 0 ? (
+                        <tr class="empty-row text-center">
+                            <td
+                                colspan={teamColumns.length}
+                                class="p-12 text-gray-600 italic uppercase text-[10px]"
+                            >
+                                No team hubs found.
+                            </td>
+                        </tr>
+                    ) : (
+                        teamEntreprises.map((e) => (
+                            <tr
+                                class="border-b border-gray-900 hover:bg-white/5 transition-colors group"
+                                id={`row-${e.id}`}
+                                data-search={`${e.nom_legal} ${e.hub_id}`}
+                            >
+                                <td class="p-4">
+                                    <div class="font-bold text-white uppercase">
+                                        {e.nom_legal}
+                                    </div>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 bg-blue-900/10 border border-blue-900/30 text-blue-400 text-[9px] font-bold">
+                                        {e.hub_id}
+                                    </span>
+                                </td>
+                                <td class="p-4">
+                                    <span class="px-2 py-0.5 bg-purple-900/10 border border-purple-900/30 text-purple-400 text-[9px] font-bold uppercase">
+                                        Team / Hub
+                                    </span>
+                                </td>
+                                <td class="p-4">
+                                    <div class="flex justify-end gap-2 font-mono">
+                                        <button class="px-3 py-1 bg-gray-800 hover:bg-blue-500 hover:text-white text-[9px] font-bold uppercase transition-colors">
+                                            MANAGE_HUB
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))
+                    )
+                }
+            </Table>
+        </div>
+
+        <!-- System Modals -->
+        <dialog
+            id="docModal"
+            class="bg-[#0f0f0f] text-gray-300 border border-gray-800 p-0 w-full max-w-md rounded-lg backdrop:backdrop-blur-sm shadow-2xl"
+        >
+            <div
+                class="p-6 border-b border-gray-800 bg-gray-900/50 flex justify-between items-center"
+            >
+                <h3
+                    class="text-white font-bold uppercase tracking-widest text-[10px]"
+                >
+                    DOCUMENTS_VERIFICATION
+                </h3>
+                <button class="close-modal text-gray-500 hover:text-white"
+                    >✕</button
+                >
+            </div>
+            <div id="docLinks" class="p-6 space-y-3"></div>
+        </dialog>
+
+        <dialog
+            id="actionModal"
+            class="bg-[#0f0f0f] text-gray-300 border border-gray-800 p-0 w-full max-w-lg rounded-lg backdrop:backdrop-blur-sm shadow-2xl"
+        >
+            <div
+                class="p-6 border-b border-gray-800 bg-blue-950/40 flex justify-between items-center"
+            >
+                <h3
+                    class="text-blue-400 font-bold uppercase tracking-widest text-[10px]"
+                >
+                    VALIDATION_PARTENAIRE
+                </h3>
+                <button class="close-modal text-gray-500 hover:text-white"
+                    >✕</button
+                >
+            </div>
+            <div class="p-6 space-y-6">
+                <div class="bg-gray-900/50 p-4 border border-gray-800 rounded">
+                    <div id="modalDriverInfo" class="space-y-1">
+                        <div
+                            class="text-white font-bold uppercase text-xs"
+                            id="modalDriverName"
+                        >
+                            ---
+                        </div>
+                        <div
+                            class="text-gray-500 text-[10px]"
+                            id="modalDriverEntreprise"
+                        >
+                            ---
+                        </div>
+                    </div>
+                    <div
+                        id="referralBadge"
+                        class="hidden mt-3 p-2 bg-blue-900/20 border border-blue-900/50 text-blue-400 text-[9px] font-bold uppercase text-center animate-pulse"
+                    >
+                        Parrainage détecté : <span id="referralCode">---</span>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label
+                            class="block text-[10px] text-gray-500 uppercase font-bold mb-2 tracking-widest"
+                            >Type de compte</label
+                        >
+                        <select
+                            id="accountTypeSelect"
+                            class="w-full bg-black border border-gray-800 p-3 text-xs focus:border-blue-500 focus:outline-none text-white appearance-none cursor-pointer"
+                        >
+                            <option value="solo">INDIVIDUEL (SOLO)</option>
+                            <option value="team">EQUIPE / PARTENAIRE HUB</option
+                            >
+                        </select>
+                    </div>
+
+                    <div id="hubSelectionField" class="hidden">
+                        <label
+                            class="block text-[10px] text-gray-500 uppercase font-bold mb-2 tracking-widest"
+                            >Sélectionner le Hub</label
+                        >
+                        <select
+                            id="hubSelect"
+                            class="w-full bg-black border border-gray-800 p-3 text-xs focus:border-blue-500 focus:outline-none text-white appearance-none cursor-pointer"
+                        >
+                            {
+                                hubs.length === 0 ? (
+                                    <option value="">
+                                        AUCUNE ÉQUIPE CRÉÉE
+                                    </option>
+                                ) : (
+                                    <>
+                                        <option value="">
+                                            -- CHOISIR UN HUB --
+                                        </option>
+                                        {hubs.map((h) => (
+                                            <option value={h.id}>
+                                                {h.nom} (
+                                                {h.invite_code || "CODE_NULL"})
+                                            </option>
+                                        ))}
+                                    </>
+                                )
+                            }
+                        </select>
+                    </div>
+
+                    <div>
+                        <label
+                            class="block text-[10px] text-gray-500 uppercase font-bold mb-2 tracking-widest"
+                            >Notes Admin (Optionnel)</label
+                        >
+                        <textarea
+                            id="adminComment"
+                            class="w-full bg-black border border-gray-800 p-3 h-20 focus:border-blue-500 focus:outline-none text-gray-300 text-xs resize-none"
+                            placeholder="Notes techniques..."></textarea>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <button
+                        id="validateBtn"
+                        class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 uppercase text-[10px] tracking-widest transition-all shadow-[0_0_20px_rgba(37,99,235,0.2)]"
+                    >
+                        VALIDER_L_INSCRIPTION
+                    </button>
+                    <button
+                        id="rejectBtn"
+                        class="w-full bg-red-950/30 text-red-500 border border-red-900/50 hover:bg-red-600 hover:text-white font-bold py-2 uppercase text-[9px] tracking-widest transition-all"
+                    >
+                        REJETER_LE_DOSSIER
+                    </button>
+                </div>
+            </div>
+        </dialog>
+    </main>
+
+    <script>
+        // State
+        let currentPartnerId: string | null = null;
+        const DIRECTUS_URL = "https://directus.remyparis.com";
+
+        // DOM elements
+        const docModal = document.getElementById(
+            "docModal",
+        ) as HTMLDialogElement;
+        const actionModal = document.getElementById(
+            "actionModal",
+        ) as HTMLDialogElement;
+        const tabs = document.querySelectorAll(".tab-btn");
+        const contents = document.querySelectorAll(".tab-content");
+        const searchInput = document.getElementById(
+            "globalSearch",
+        ) as HTMLInputElement;
+
+        // Modal Elements
+        const accountTypeSelect = document.getElementById(
+            "accountTypeSelect",
+        ) as HTMLSelectElement;
+        const hubSelectionField = document.getElementById(
+            "hubSelectionField",
+        ) as HTMLDivElement;
+        const hubSelect = document.getElementById(
+            "hubSelect",
+        ) as HTMLSelectElement;
+        const adminComment = document.getElementById(
+            "adminComment",
+        ) as HTMLTextAreaElement;
+        const validateBtn = document.getElementById(
+            "validateBtn",
+        ) as HTMLButtonElement;
+        const rejectBtn = document.getElementById(
+            "rejectBtn",
+        ) as HTMLButtonElement;
+
+        const modalDriverName = document.getElementById(
+            "modalDriverName",
+        ) as HTMLDivElement;
+        const modalDriverEntreprise = document.getElementById(
+            "modalDriverEntreprise",
+        ) as HTMLDivElement;
+        const referralBadge = document.getElementById(
+            "referralBadge",
+        ) as HTMLDivElement;
+        const referralCodeSpan = document.getElementById(
+            "referralCode",
+        ) as HTMLSpanElement;
+
+        // --- REFRESH LOGIC ---
+        function refreshData() {
+            // Dans cette architecture Astro (SSR), le refresh se fait par reload
+            // pour re-voter le code serveur avec les données Directus à jour.
+            window.location.reload();
+        }
+
+        // --- TAB LOGIC ---
+        tabs.forEach((tab) => {
+            const button = tab as HTMLButtonElement;
+            button.addEventListener("click", () => {
+                const target = button.dataset.tab;
+
+                // Update UI
+                tabs.forEach((t) =>
+                    t.classList.remove(
+                        "active",
+                        "border-blue-500",
+                        "text-white",
+                        "bg-white/5",
+                    ),
+                );
+                tabs.forEach((t) =>
+                    t.classList.add("border-transparent", "text-gray-500"),
+                );
+
+                button.classList.add(
+                    "active",
+                    "border-blue-500",
+                    "text-white",
+                    "bg-white/5",
+                );
+                button.classList.remove("border-transparent", "text-gray-500");
+
+                contents.forEach((c) => c.classList.add("hidden"));
+                document
+                    .getElementById(`tab-${target}`)
+                    ?.classList.remove("hidden");
+
+                filterTable();
+            });
+        });
+
+        // --- SEARCH LOGIC ---
+        function filterTable() {
+            const query = searchInput.value.toLowerCase();
+            const activeTab = (
+                document.querySelector(".tab-btn.active") as HTMLButtonElement
+            )?.dataset.tab;
+            if (!activeTab) return;
+
+            const activeTableBody = document.querySelector(
+                `#tab-${activeTab} tbody`,
+            );
+            if (!activeTableBody) return;
+
+            const rows = activeTableBody.querySelectorAll("tr:not(.empty-row)");
+
+            rows.forEach((row) => {
+                const tr = row as HTMLTableRowElement;
+                const searchText = tr.dataset.search?.toLowerCase() || "";
+                if (searchText.includes(query)) {
+                    tr.style.display = "";
+                } else {
+                    tr.style.display = "none";
+                }
+            });
+        }
+
+        searchInput.addEventListener("input", filterTable);
+
+        // --- TRANSFER LOGIC (SOLOS) ---
+        document.querySelectorAll(".transfer-hub-select").forEach((select) => {
+            const s = select as HTMLSelectElement;
+            s.addEventListener("change", async () => {
+                const hubId = s.value;
+                const entrepriseId = s.dataset.id;
+
+                if (!hubId || !entrepriseId) return;
+
+                if (
+                    !confirm(
+                        "Transférer cette entreprise vers l'équipe sélectionnée ?",
+                    )
+                ) {
+                    s.value = "";
+                    return;
+                }
+
+                s.disabled = true;
+                try {
+                    const res = await fetch("/api/admin/update-entreprise", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            id: entrepriseId,
+                            hub_id: hubId,
+                        }),
+                    });
+
+                    if (res.ok) {
+                        refreshData();
+                    } else {
+                        alert("Erreur lors du transfert");
+                        s.disabled = false;
+                        s.value = "";
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Erreur critique lors du transfert");
+                    s.disabled = false;
+                }
+            });
+        });
+
+        // --- MODAL TOGGLE LOGIC ---
+        accountTypeSelect.addEventListener("change", () => {
+            if (accountTypeSelect.value === "team") {
+                hubSelectionField.classList.remove("hidden");
+            } else {
+                hubSelectionField.classList.add("hidden");
+                hubSelect.value = "";
+            }
+        });
+
+        // --- ACTION HANDLERS ---
+        document.querySelectorAll(".manage-btn").forEach((btn) => {
+            const button = btn as HTMLButtonElement;
+            button.addEventListener("click", () => {
+                currentPartnerId = button.dataset.id || null;
+
+                modalDriverName.innerText = button.dataset.name || "---";
+                modalDriverEntreprise.innerText =
+                    button.dataset.entreprise || "No Enterprise Name";
+
+                const hubCode = button.dataset.hubCode;
+                if (hubCode && hubCode !== "null" && hubCode !== "") {
+                    referralBadge.classList.remove("hidden");
+                    referralCodeSpan.innerText = hubCode;
+                } else {
+                    referralBadge.classList.add("hidden");
+                }
+
+                accountTypeSelect.value = "solo";
+                hubSelectionField.classList.add("hidden");
+                hubSelect.value = "";
+                adminComment.value = "";
+
+                actionModal?.showModal();
+            });
+        });
+
+        validateBtn?.addEventListener("click", async () => {
+            const type = accountTypeSelect.value;
+            const hubId = hubSelect.value;
+
+            if (type === "team" && !hubId) {
+                return alert("Veuillez sélectionner un Hub pour une équipe.");
+            }
+
+            if (
+                !confirm(
+                    `Confirmer la VALIDATION de ce partenaire en tant que ${type.toUpperCase()} ?`,
+                )
+            )
+                return;
+
+            await handleValidation("approved", {
+                account_type: type,
+                hub_id: hubId,
+                point_noir_admin: adminComment.value,
+            });
+        });
+
+        rejectBtn?.addEventListener("click", async () => {
+            const comment = adminComment.value;
+            if (!comment) return alert("Motif obligatoire pour un rejet.");
+
+            if (!confirm("VOULEZ-VOUS REJETER CE DOSSIER ?")) return;
+
+            await handleValidation("rejected", { point_noir_admin: comment });
+        });
+
+        async function handleValidation(status: string, extra: any = {}) {
+            if (!currentPartnerId) return;
+
+            const originalText =
+                status === "approved"
+                    ? validateBtn.innerText
+                    : rejectBtn.innerText;
+            const btn = status === "approved" ? validateBtn : rejectBtn;
+
+            btn.innerText = "PROCESSING...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch("/api/admin/validate-partner", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        id: currentPartnerId,
+                        status,
+                        ...extra,
+                    }),
+                });
+
+                if (res.ok) {
+                    actionModal?.close();
+                    refreshData();
+                } else {
+                    const errorData = await res.json();
+                    alert(`Erreur: ${errorData.error || "Inconnue"}`);
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Erreur critique système");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // --- DOCS HANDLING ---
+        document.querySelectorAll(".doc-btn").forEach((btn) => {
+            const button = btn as HTMLButtonElement;
+            button.addEventListener("click", () => {
+                const files = JSON.parse(button.dataset.files || "{}");
+                const container = document.getElementById("docLinks");
+                if (!container) return;
+
+                container.innerHTML = "";
+
+                const docTitles: Record<string, string> = {
+                    assurance: "Assurance VTC",
+                    carte_pro: "Carte Pro",
+                    rib: "RIB / Banking",
+                    carte_grise: "Carte Grise",
+                };
+
+                let empty = true;
+                Object.entries(files).forEach(([key, id]) => {
+                    if (id) {
+                        empty = false;
+                        const link = document.createElement("a");
+                        link.href = `${DIRECTUS_URL}/assets/${id}?download`;
+                        link.target = "_blank";
+                        link.className =
+                            "flex items-center justify-between p-3 bg-gray-950 border border-gray-800 hover:border-blue-500 transition-all group";
+                        link.innerHTML = `
+                            <span class="uppercase text-[9px] font-bold group-hover:text-blue-400 font-mono">${docTitles[key] || key}</span>
+                            <span class="text-gray-600 text-[10px]">📥 OPEN</span>
+                        `;
+                        container.appendChild(link);
+                    }
+                });
+
+                if (empty) {
+                    container.innerHTML =
+                        '<p class="text-gray-600 italic text-center text-[10px]">Aucun document.</p>';
+                }
+
+                docModal?.showModal();
+            });
+        });
+
+        // Logout
+        document
+            .getElementById("logoutBtn")
+            ?.addEventListener("click", async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                window.location.href = "/admin";
+            });
+
+        // Close Modals
+        document.querySelectorAll(".close-modal").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                docModal?.close();
+                actionModal?.close();
+            });
+        });
+
+        [docModal, actionModal].forEach((m) => {
+            m?.addEventListener("click", (e) => {
+                if (e.target === m) m.close();
+            });
+        });
+    </script>
+
+    <style>
+        .tab-btn.active {
+            background: linear-gradient(
+                to bottom,
+                transparent,
+                rgba(59, 130, 246, 0.05)
+            );
+        }
+
+        dialog::backdrop {
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(4px);
+        }
+
+        @keyframes shake {
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+            25% {
+                transform: translateX(-4px);
+            }
+            75% {
+                transform: translateX(4px);
+            }
+        }
+
+        .animate-shake {
+            animation: shake 0.4s ease-in-out;
+        }
+
+        tr {
+            transition:
+                opacity 0.3s,
+                transform 0.3s,
+                background-color 0.2s;
+        }
+
+        select {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+        }
+    </style>
+</Layout>

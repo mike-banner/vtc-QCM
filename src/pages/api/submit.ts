@@ -3,130 +3,156 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { onboardingSchema } from '../../lib/schema';
 
-export const ALL: APIRoute = async ({ request }) => {
-    // Configuration CORS
+export const POST: APIRoute = async ({ request }) => {
     const corsHeaders = {
-        // ⚠️ SÉCURITÉ : En prod, remplace '*' par ton domaine exact
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     };
 
-    // 1. Gestion du Preflight OPTIONS (CORS)
-    if (request.method === "OPTIONS") {
-        return new Response(null, {
-            status: 204,
-            headers: corsHeaders
-        });
-    }
-
-    // 2. Vérification stricte du POST
-    if (request.method !== "POST") {
-        return new Response(JSON.stringify({ message: `Method ${request.method} not allowed` }), {
-            status: 405,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+    if (request.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {
-        console.log("--> API SUBMIT: Requête reçue");
-        const textData = await request.text();
-        console.log("--> RAW BODY:", textData);
+        const data = await request.json();
 
-        const data = textData ? JSON.parse(textData) : {};
+        const parsed = onboardingSchema.safeParse(data);
 
-        // Test Parsing
-        // console.log("--> Données reçues:", JSON.stringify(data).substring(0, 50) + "...");
-
-        const parsedData = onboardingSchema.safeParse(data);
-
-        if (!parsedData.success) {
-            console.error("--> Validation échouée", parsedData.error.errors);
-            return new Response(JSON.stringify({
-                message: 'Données invalides',
-                errors: parsedData.error.errors
-            }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
+        if (!parsed.success) {
+            return new Response(
+                JSON.stringify({
+                    message: 'Données invalides',
+                    errors: parsed.error.errors
+                }),
+                { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+            );
         }
 
-        const d = parsedData.data;
+        const d = parsed.data;
 
-        // Fonction de fusion
-        const fuseData = (main: string[], others: string | undefined) => {
-            const base = (main || []).filter(item => item !== "Autres");
-            const extra = others ? others.split(',').map(s => s.trim()).filter(s => s !== "") : [];
-            return [...base, ...extra].join(', ');
+        const fuseData = (main: string[], others?: string) => {
+            const base = (main || []).filter(i => i !== "Autres");
+            const extra = others
+                ? others.split(',').map(s => s.trim()).filter(Boolean)
+                : [];
+            return [...base, ...extra];
         };
 
         const payload = {
-            status: "draft",
+            status: "pending",
+
             prenom: d.firstName,
             nom: d.lastName,
             email: d.email,
             nom_entreprise: d.companyName,
+
             categorie_vehicule: d.vehicleCategory,
             capacite_passagers: d.passengerCapacity,
             capacite_bagages: d.luggageCapacity,
+
             canal_reservation: d.currentChannel,
             delai_prevenance: d.bookingLeadTime,
 
-            infos_critiques: fuseData(d.criticalInfo, d.otherCriticalInfo || ""),
-            langues: fuseData(d.langues, d.otherLanguage || ""),
-            options_bord: fuseData(d.premiumServices, d.otherService || ""),
+            infos_critiques: fuseData(d.criticalInfo, d.otherCriticalInfo).join(', '),
+            langues: fuseData(d.langues, d.otherLanguage),
+            options_bord: fuseData(d.premiumServices, d.otherService),
 
             mode_validation: d.validationMode,
             modele_prix: d.pricingModel,
+
             tarif_4h: d.tarif_4h,
             tarif_8h: d.tarif_8h,
             km_inclus: d.km_inclus,
             prix_km_supp: d.prix_km_supp,
-            frais_supp: d.extraFees || "", // Fallback
+
+            frais_supp: d.extraFees || null,
             acompte_percent: d.acompte_percent,
             moment_paiement: d.paymentTiming,
-            besoin_facturation: d.invoiceNeeds || false, // Sécurité boolean
+
+            besoin_facturation: d.invoiceNeeds ?? false,
+
             zone_intervention: d.serviceArea,
             interet_tourisme: d.interet_tourisme,
-            tarifs_fixes_aeroport: d.tarifs_fixes_aeroport || false,
-            gestion_pauses: d.breakManagement || "",
+            tarifs_fixes_aeroport: d.tarifs_fixes_aeroport ?? false,
+
+            gestion_pauses: d.breakManagement,
             politique_multi_stop: d.multiStopPolicy,
-            profil_client_ideal: d.idealClientProfile || "",
+            profil_client_ideal: d.idealClientProfile,
+
             politique_annulation: d.cancellationPolicy,
-            retard_facture: d.latePolicy || false,
-            sous_traitance: d.subcontracting || false,
+            retard_facture: d.latePolicy ?? false,
+            sous_traitance: d.subcontracting ?? false,
+
             point_noir_admin: d.painPoints,
-            suivi_temps_reel: d.realTimeTracking || false,
-            compte_fidelite: d.loyaltyAccount || false
+            suivi_temps_reel: d.realTimeTracking ?? false,
+            compte_fidelite: d.loyaltyAccount ?? false
         };
 
-        console.log("--> Envoi vers n8n...", JSON.stringify(payload).substring(0, 50) + "...");
+        const baseUrl = import.meta.env.DIRECTUS_URL;
+        const token = import.meta.env.DIRECTUS_TOKEN;
 
-        const n8nResponse = await fetch('https://n8n.remyparis.com/webhook/onboarding-vtc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        // 🔎 1️⃣ Vérifier si email existe déjà
+        const existing = await fetch(
+            `${baseUrl}/items/onboarding_drivers?filter[email][_eq]=${d.email}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            }
+        );
 
-        console.log("--> Réponse n8n status:", n8nResponse.status);
+        const existingJson = await existing.json();
+        const existingItem = existingJson?.data?.[0];
 
-        if (!n8nResponse.ok) {
-            const errorText = await n8nResponse.text();
-            console.error("Erreur n8n brute:", errorText);
-            throw new Error(`Erreur n8n (${n8nResponse.status}): ${errorText.substring(0, 200)}`);
+        if (existingItem) {
+            // 🔄 UPDATE
+            const updateRes = await fetch(
+                `${baseUrl}/items/onboarding_drivers/${existingItem.id}`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                }
+            );
+
+            if (!updateRes.ok) {
+                const errorText = await updateRes.text();
+                throw new Error(`Directus update error: ${errorText}`);
+            }
+
+        } else {
+            // ➕ CREATE
+            const createRes = await fetch(
+                `${baseUrl}/items/onboarding_drivers`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                }
+            );
+
+            if (!createRes.ok) {
+                const errorText = await createRes.text();
+                throw new Error(`Directus create error: ${errorText}`);
+            }
         }
 
-        console.log("--> SUCCÈS FINI");
-        return new Response(JSON.stringify({ success: true, message: 'Dossier reçu' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return new Response(
+            JSON.stringify({ success: true, message: 'Dossier enregistré' }),
+            { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        );
 
     } catch (error: any) {
-        console.error("--> CATCH ERROR:", error);
-        return new Response(JSON.stringify({ message: error.message || 'Erreur inconnue' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return new Response(
+            JSON.stringify({ message: error.message || 'Erreur serveur' }),
+            { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        );
     }
 };

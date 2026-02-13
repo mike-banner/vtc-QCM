@@ -1,0 +1,28 @@
+---
+// /home/mike/projects/vtc/vtc-questions/src/pages/test-env.astro
+const directusUrl = import.meta.env.DIRECTUS_URL;
+const directusToken = import.meta.env.DIRECTUS_TOKEN;
+
+console.log("=== TEST ENV ===");
+console.log("DIRECTUS_URL:", directusUrl);
+console.log(
+    "DIRECTUS_TOKEN (10 premiers):",
+    directusToken?.substring(0, 10) + "...",
+);
+console.log("DIRECTUS_TOKEN (complet):", directusToken);
+console.log("================");
+---
+
+<html>
+    <head>
+        <title>Test Env</title>
+    </head>
+    <body>
+        <h1>Test Variables d'Environnement</h1>
+        <p>DIRECTUS_URL: {directusUrl}</p>
+        <p>
+            DIRECTUS_TOKEN (10 premiers): {directusToken?.substring(0, 10)}...
+        </p>
+        <p>Token complet visible dans les logs du terminal</p>
+    </body>
+</html>

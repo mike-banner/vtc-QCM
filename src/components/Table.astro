@@ -1,0 +1,47 @@
+---
+// /home/mike/projects/vtc/vtc-questions/src/components/Table.astro
+interface Props {
+    columns: {
+        key: string;
+        label: string;
+        class?: string;
+        align?: "left" | "right" | "center";
+    }[];
+    id?: string;
+}
+
+const { columns, id = "data-table" } = Astro.props;
+---
+
+<div
+    class="overflow-x-auto border border-gray-800 rounded-lg bg-black/40 backdrop-blur-sm"
+    id={id}
+>
+    <table class="w-full text-left border-collapse">
+        <thead>
+            <tr
+                class="bg-gray-900/50 text-[10px] uppercase tracking-widest text-gray-500 border-b border-gray-800"
+            >
+                {
+                    columns.map((col) => (
+                        <th
+                            class={`p-4 font-normal ${col.class || ""} ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : ""}`}
+                        >
+                            {col.label}
+                        </th>
+                    ))
+                }
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-900">
+            <slot />
+        </tbody>
+    </table>
+</div>
+
+<style>
+    /* Optionnel: animation pour les lignes ajoutées via le slot */
+    :global(tr) {
+        transition: all 0.2s ease-in-out;
+    }
+</style>
