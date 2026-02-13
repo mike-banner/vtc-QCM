@@ -1,3 +1,5 @@
+// /home/mike/projects/vtc/vtc-questions/src/pages/api/submit.ts
+
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
@@ -16,7 +18,6 @@ export const POST: APIRoute = async ({ request }) => {
 
     try {
         const data = await request.json();
-
         const parsed = onboardingSchema.safeParse(data);
 
         if (!parsed.success) {
@@ -31,82 +32,53 @@ export const POST: APIRoute = async ({ request }) => {
 
         const d = parsed.data;
 
-        const fuseData = (main: string[], others?: string) => {
-            const base = (main || []).filter(i => i !== "Autres");
-            const extra = others
-                ? others.split(',').map(s => s.trim()).filter(Boolean)
-                : [];
-            return [...base, ...extra];
-        };
-
+        // Mapping Strict Snake Case pour la DB onboarding_drivers
         const payload = {
             status: "pending",
 
-            prenom: d.firstName,
-            nom: d.lastName,
+            first_name: d.firstName,
+            last_name: d.lastName,
             email: d.email,
-            nom_entreprise: d.companyName,
+            phone: d.phone,
+            professional_license_number: d.professionalLicenseNumber,
+            company_name: d.companyName,
+            account_type: d.accountType,
 
-            categorie_vehicule: d.vehicleCategory,
-            capacite_passagers: d.passengerCapacity,
-            capacite_bagages: d.luggageCapacity,
+            vehicle_category: d.vehicleCategory,
+            vehicle_model: d.vehicleModel,
+            immatriculation: d.immatriculation,
+            passenger_capacity: d.passengerCapacity,
+            luggage_capacity: d.luggageCapacity,
 
-            canal_reservation: d.currentChannel,
-            delai_prevenance: d.bookingLeadTime,
-
-            infos_critiques: fuseData(d.criticalInfo, d.otherCriticalInfo).join(', '),
-            langues: fuseData(d.langues, d.otherLanguage),
-            options_bord: fuseData(d.premiumServices, d.otherService),
-
-            mode_validation: d.validationMode,
-            modele_prix: d.pricingModel,
-
-            tarif_4h: d.tarif_4h,
-            tarif_8h: d.tarif_8h,
-            km_inclus: d.km_inclus,
-            prix_km_supp: d.prix_km_supp,
-
-            frais_supp: d.extraFees || null,
-            acompte_percent: d.acompte_percent,
-            moment_paiement: d.paymentTiming,
-
-            besoin_facturation: d.invoiceNeeds ?? false,
-
-            zone_intervention: d.serviceArea,
-            interet_tourisme: d.interet_tourisme,
-            tarifs_fixes_aeroport: d.tarifs_fixes_aeroport ?? false,
-
-            gestion_pauses: d.breakManagement,
-            politique_multi_stop: d.multiStopPolicy,
-            profil_client_ideal: d.idealClientProfile,
-
-            politique_annulation: d.cancellationPolicy,
-            retard_facture: d.latePolicy ?? false,
-            sous_traitance: d.subcontracting ?? false,
-
-            point_noir_admin: d.painPoints,
-            suivi_temps_reel: d.realTimeTracking ?? false,
-            compte_fidelite: d.loyaltyAccount ?? false
+            pricing_model: d.pricingModel,
+            rate_4h: d.rate4h,
+            rate_8h: d.rate8h,
+            included_km: d.includedKm,
+            extra_km_price: d.extraKmPrice,
+            deposit_percent: d.depositPercent,
+            payment_timing: d.paymentTiming,
+            service_area: d.serviceArea
         };
 
         const baseUrl = import.meta.env.DIRECTUS_URL;
         const token = import.meta.env.DIRECTUS_TOKEN;
 
-        // 🔎 1️⃣ Vérifier si email existe déjà
         const existing = await fetch(
-            `${baseUrl}/items/onboarding_drivers?filter[email][_eq]=${d.email}`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            }
+            `${baseUrl}/items/onboarding_drivers?filter[email][_eq]=${encodeURIComponent(d.email)}`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
         );
 
         const existingJson = await existing.json();
         const existingItem = existingJson?.data?.[0];
 
         if (existingItem) {
-            // 🔄 UPDATE
+            if (existingItem.status === 'approved') {
+                return new Response(
+                    JSON.stringify({ message: "Dossier déjà validé. Contactez l'administration." }),
+                    { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+                );
+            }
+
             const updateRes = await fetch(
                 `${baseUrl}/items/onboarding_drivers/${existingItem.id}`,
                 {
@@ -120,12 +92,11 @@ export const POST: APIRoute = async ({ request }) => {
             );
 
             if (!updateRes.ok) {
-                const errorText = await updateRes.text();
-                throw new Error(`Directus update error: ${errorText}`);
+                const errText = await updateRes.text();
+                console.error("DIRECTUS UPDATE ERROR:", errText);
+                throw new Error("Erreur mise à jour dossier");
             }
-
         } else {
-            // ➕ CREATE
             const createRes = await fetch(
                 `${baseUrl}/items/onboarding_drivers`,
                 {
@@ -139,8 +110,9 @@ export const POST: APIRoute = async ({ request }) => {
             );
 
             if (!createRes.ok) {
-                const errorText = await createRes.text();
-                throw new Error(`Directus create error: ${errorText}`);
+                const errText = await createRes.text();
+                console.error("DIRECTUS CREATE ERROR:", errText);
+                throw new Error("Erreur création dossier");
             }
         }
 

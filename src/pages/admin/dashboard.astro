@@ -7,7 +7,7 @@ import Table from "../../components/Table.astro";
 import {
     DirectusClient,
     type OnboardingEntry,
-    type Entreprise,
+    type Company,
     type Hub,
 } from "../../lib/directus";
 import { isAuthenticated } from "../../lib/auth";
@@ -22,8 +22,8 @@ if (!auth) {
 
 const directus = new DirectusClient();
 let pendingPartners: OnboardingEntry[] = [];
-let soloEntreprises: Entreprise[] = [];
-let teamEntreprises: Entreprise[] = [];
+let soloCompanies: Company[] = [];
+let teamCompanies: Company[] = [];
 let hubs: Hub[] = [];
 let error: string | null = null;
 
@@ -32,8 +32,8 @@ try {
     if (pendingPartners.length === 0) {
         pendingPartners = await directus.getOnboardingByStatus("draft");
     }
-    soloEntreprises = await directus.getEntreprisesSolo();
-    teamEntreprises = await directus.getEntreprisesEquipe();
+    soloCompanies = await directus.getCompaniesSolo();
+    teamCompanies = await directus.getCompaniesTeam();
     hubs = await directus.getHubs();
 } catch (e) {
     error = "Erreur de connexion à Directus";
@@ -42,7 +42,7 @@ try {
 
 const pendingColumns = [
     { key: "identity", label: "Identité // Email" },
-    { key: "nom_entreprise", label: "Entreprise" },
+    { key: "company_name", label: "Entreprise" },
     { key: "details", label: "Véhicule" },
     { key: "hub", label: "Hub Applied" },
     { key: "actions", label: "Actions", align: "right" as const },
@@ -140,7 +140,7 @@ const teamColumns = [
                 data-tab="solos"
             >
                 Solos <span class="ml-2 text-gray-700"
-                    >[{soloEntreprises.length}]</span
+                    >[{soloCompanies.length}]</span
                 >
             </button>
             <button
@@ -148,7 +148,7 @@ const teamColumns = [
                 data-tab="teams"
             >
                 Équipes <span class="ml-2 text-gray-700"
-                    >[{teamEntreprises.length}]</span
+                    >[{teamCompanies.length}]</span
                 >
             </button>
         </nav>
@@ -171,22 +171,22 @@ const teamColumns = [
                             <tr
                                 class="border-b border-gray-900 hover:bg-blue-900/5 transition-colors group"
                                 id={`row-${p.id}`}
-                                data-search={`${p.prenom} ${p.nom} ${p.email} ${p.nom_entreprise}`}
+                                data-search={`${p.first_name} ${p.last_name} ${p.email} ${p.company_name}`}
                             >
                                 <td class="p-4">
                                     <div class="font-bold text-white uppercase">
-                                        {p.prenom} {p.nom}
+                                        {p.first_name} {p.last_name}
                                     </div>
                                     <div class="text-[10px] text-gray-500 mt-1">
                                         {p.email}
                                     </div>
                                 </td>
                                 <td class="p-4 uppercase text-gray-400 font-bold">
-                                    {p.nom_entreprise}
+                                    {p.company_name}
                                 </td>
                                 <td class="p-4">
                                     <div class="text-[10px] text-gray-400">
-                                        {p.categorie_vehicule}
+                                        {p.vehicle_category}
                                     </div>
                                     <div class="font-mono text-[10px] text-gray-600 mt-0.5">
                                         {p.immatriculation || "NO_PLATE"}
@@ -208,7 +208,7 @@ const teamColumns = [
                                                 rib: p.rib_file,
                                                 carte_grise: p.immatriculation
                                                     ? "LINK_EXIST"
-                                                    : null, // immatriculation used here
+                                                    : null,
                                             })}
                                         >
                                             DOCS
@@ -216,8 +216,8 @@ const teamColumns = [
                                         <button
                                             class="manage-btn px-3 py-1 bg-blue-900/20 text-blue-400 border border-blue-900/50 hover:bg-blue-500 hover:text-white text-[9px] font-bold uppercase transition-all"
                                             data-id={p.id}
-                                            data-name={`${p.prenom} ${p.nom}`}
-                                            data-entreprise={p.nom_entreprise}
+                                            data-name={`${p.first_name} ${p.last_name}`}
+                                            data-company={p.company_name}
                                             data-hub-code={p.applied_hub_code}
                                         >
                                             Gérer
@@ -235,7 +235,7 @@ const teamColumns = [
         <div id="tab-solos" class="tab-content hidden">
             <Table columns={soloColumns} id="table-solos">
                 {
-                    soloEntreprises.length === 0 ? (
+                    soloCompanies.length === 0 ? (
                         <tr class="empty-row text-center">
                             <td
                                 colspan={soloColumns.length}
@@ -245,15 +245,15 @@ const teamColumns = [
                             </td>
                         </tr>
                     ) : (
-                        soloEntreprises.map((e) => (
+                        soloCompanies.map((e) => (
                             <tr
                                 class="border-b border-gray-900 hover:bg-white/5 transition-colors group"
                                 id={`row-${e.id}`}
-                                data-search={`${e.nom_legal} ${e.email}`}
+                                data-search={`${e.legal_name} ${e.email}`}
                             >
                                 <td class="p-4">
                                     <div class="font-bold text-white uppercase">
-                                        {e.nom_legal}
+                                        {e.legal_name}
                                     </div>
                                     <div class="text-[10px] text-gray-500 mt-1">
                                         {e.email || "N/A"}
@@ -302,7 +302,7 @@ const teamColumns = [
         <div id="tab-teams" class="tab-content hidden">
             <Table columns={teamColumns} id="table-teams">
                 {
-                    teamEntreprises.length === 0 ? (
+                    teamCompanies.length === 0 ? (
                         <tr class="empty-row text-center">
                             <td
                                 colspan={teamColumns.length}
@@ -312,15 +312,15 @@ const teamColumns = [
                             </td>
                         </tr>
                     ) : (
-                        teamEntreprises.map((e) => (
+                        teamCompanies.map((e) => (
                             <tr
                                 class="border-b border-gray-900 hover:bg-white/5 transition-colors group"
                                 id={`row-${e.id}`}
-                                data-search={`${e.nom_legal} ${e.hub_id}`}
+                                data-search={`${e.legal_name} ${e.hub_id}`}
                             >
                                 <td class="p-4">
                                     <div class="font-bold text-white uppercase">
-                                        {e.nom_legal}
+                                        {e.legal_name}
                                     </div>
                                 </td>
                                 <td class="p-4">
@@ -394,7 +394,7 @@ const teamColumns = [
                         </div>
                         <div
                             class="text-gray-500 text-[10px]"
-                            id="modalDriverEntreprise"
+                            id="modalDriverCompany"
                         >
                             ---
                         </div>
@@ -469,9 +469,9 @@ const teamColumns = [
                 <div class="space-y-3">
                     <button
                         id="validateBtn"
-                        class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 uppercase text-[10px] tracking-widest transition-all shadow-[0_0_20px_rgba(37,99,235,0.2)]"
+                        class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 uppercase text-[10px] tracking-widest transition-all shadow-[0_0_20px_rgba(37,99,235,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        VALIDER_L_INSCRIPTION
+                        Approuver
                     </button>
                     <button
                         id="rejectBtn"
@@ -487,6 +487,7 @@ const teamColumns = [
     <script>
         // State
         let currentPartnerId: string | null = null;
+        let isProcessing = false;
         const DIRECTUS_URL = "https://directus.remyparis.com";
 
         // DOM elements
@@ -525,8 +526,8 @@ const teamColumns = [
         const modalDriverName = document.getElementById(
             "modalDriverName",
         ) as HTMLDivElement;
-        const modalDriverEntreprise = document.getElementById(
-            "modalDriverEntreprise",
+        const modalDriverCompany = document.getElementById(
+            "modalDriverCompany",
         ) as HTMLDivElement;
         const referralBadge = document.getElementById(
             "referralBadge",
@@ -537,8 +538,6 @@ const teamColumns = [
 
         // --- REFRESH LOGIC ---
         function refreshData() {
-            // Dans cette architecture Astro (SSR), le refresh se fait par reload
-            // pour re-voter le code serveur avec les données Directus à jour.
             window.location.reload();
         }
 
@@ -611,9 +610,9 @@ const teamColumns = [
             const s = select as HTMLSelectElement;
             s.addEventListener("change", async () => {
                 const hubId = s.value;
-                const entrepriseId = s.dataset.id;
+                const companyId = s.dataset.id;
 
-                if (!hubId || !entrepriseId) return;
+                if (!hubId || !companyId) return;
 
                 if (
                     !confirm(
@@ -630,7 +629,7 @@ const teamColumns = [
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            id: entrepriseId,
+                            id: companyId,
                             hub_id: hubId,
                         }),
                     });
@@ -667,8 +666,8 @@ const teamColumns = [
                 currentPartnerId = button.dataset.id || null;
 
                 modalDriverName.innerText = button.dataset.name || "---";
-                modalDriverEntreprise.innerText =
-                    button.dataset.entreprise || "No Enterprise Name";
+                modalDriverCompany.innerText =
+                    button.dataset.company || "No Company Name";
 
                 const hubCode = button.dataset.hubCode;
                 if (hubCode && hubCode !== "null" && hubCode !== "") {
@@ -719,15 +718,13 @@ const teamColumns = [
         });
 
         async function handleValidation(status: string, extra: any = {}) {
-            if (!currentPartnerId) return;
+            if (!currentPartnerId || isProcessing) return;
 
-            const originalText =
-                status === "approved"
-                    ? validateBtn.innerText
-                    : rejectBtn.innerText;
+            isProcessing = true;
             const btn = status === "approved" ? validateBtn : rejectBtn;
+            const originalText = btn.innerText;
 
-            btn.innerText = "PROCESSING...";
+            btn.innerText = "Validation...";
             btn.disabled = true;
 
             try {
@@ -752,7 +749,9 @@ const teamColumns = [
                 console.error(e);
                 alert("Erreur critique système");
             } finally {
-                btn.innerText = originalText;
+                isProcessing = false;
+                btn.innerText =
+                    status === "approved" ? "Approuver" : originalText;
                 btn.disabled = false;
             }
         }
@@ -800,15 +799,7 @@ const teamColumns = [
             });
         });
 
-        // Logout
-        document
-            .getElementById("logoutBtn")
-            ?.addEventListener("click", async () => {
-                await fetch("/api/auth/logout", { method: "POST" });
-                window.location.href = "/admin";
-            });
-
-        // Close Modals
+        // Close logic
         document.querySelectorAll(".close-modal").forEach((btn) => {
             btn.addEventListener("click", () => {
                 docModal?.close();
@@ -816,57 +807,12 @@ const teamColumns = [
             });
         });
 
-        [docModal, actionModal].forEach((m) => {
-            m?.addEventListener("click", (e) => {
-                if (e.target === m) m.close();
-            });
+        // Keyboard ESC
+        window.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+                docModal?.close();
+                actionModal?.close();
+            }
         });
     </script>
-
-    <style>
-        .tab-btn.active {
-            background: linear-gradient(
-                to bottom,
-                transparent,
-                rgba(59, 130, 246, 0.05)
-            );
-        }
-
-        dialog::backdrop {
-            background: rgba(0, 0, 0, 0.9);
-            backdrop-filter: blur(4px);
-        }
-
-        @keyframes shake {
-            0%,
-            100% {
-                transform: translateX(0);
-            }
-            25% {
-                transform: translateX(-4px);
-            }
-            75% {
-                transform: translateX(4px);
-            }
-        }
-
-        .animate-shake {
-            animation: shake 0.4s ease-in-out;
-        }
-
-        tr {
-            transition:
-                opacity 0.3s,
-                transform 0.3s,
-                background-color 0.2s;
-        }
-
-        select {
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-            background-position: right 0.5rem center;
-            background-repeat: no-repeat;
-            background-size: 1.5em 1.5em;
-            padding-right: 2.5rem;
-        }
-    </style>
 </Layout>
