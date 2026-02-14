@@ -4,9 +4,8 @@ export const prerender = false;
 
 import type { APIRoute } from 'astro';
 import { DirectusClient } from '../../../lib/directus';
-import { isAuthenticated } from '../../../lib/auth';
 
-export const POST: APIRoute = async ({ request, cookies }) => {
+export const POST: APIRoute = async ({ request }) => {
 
     // 🔐 Réactiver en prod
     /*

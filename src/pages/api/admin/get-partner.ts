@@ -1,5 +1,3 @@
-// /home/mike/projects/vtc/vtc-questions/src/pages/api/admin/get-partner.ts
-
 export const prerender = false;
 
 import type { APIRoute } from 'astro';
@@ -35,21 +33,25 @@ export const GET: APIRoute = async ({ url, cookies }) => {
             });
         }
 
-        // Convertir les IDs de fichiers en URLs complètes
-        if (entry.assurance_url) {
-            entry.assurance_url = directus.getFileUrl(entry.assurance_url);
-        }
-        if (entry.rib_url) {
-            entry.rib_url = directus.getFileUrl(entry.rib_url);
-        }
-        if (entry.carte_grise_url) {
-            entry.carte_grise_url = directus.getFileUrl(entry.carte_grise_url);
-        }
+        // 🔹 Transformation propre : fichiers → URLs
+        const formattedEntry = {
+            ...entry,
+            assurance_url: entry.assurance_file
+                ? directus.getFileUrl(entry.assurance_file)
+                : null,
+            rib_url: entry.rib_file
+                ? directus.getFileUrl(entry.rib_file)
+                : null,
+            carte_grise_url: entry.carte_grise_file
+                ? directus.getFileUrl(entry.carte_grise_file)
+                : null,
+        };
 
-        return new Response(JSON.stringify(entry), {
+        return new Response(JSON.stringify(formattedEntry), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
         });
+
     } catch (error: any) {
         console.error('Erreur récupération partenaire:', error);
         return new Response(JSON.stringify({ error: error.message }), {

@@ -10,7 +10,8 @@ export const onboardingSchema = z.object({
     firstName: z.string().min(2, "Le prénom est requis"),
     lastName: z.string().min(2, "Le nom est requis"),
     email: z.string().email("Email invalide"),
-    phone: z.string().min(10, "Téléphone requis"),
+    phonePrefix: z.string().default("+33"),
+    phone: z.string().min(8, "Numéro trop court"),
     professionalLicenseNumber: z.string().min(3, "N° carte pro requis"),
 
     // Company

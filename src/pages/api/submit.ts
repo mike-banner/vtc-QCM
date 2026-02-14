@@ -39,7 +39,7 @@ export const POST: APIRoute = async ({ request }) => {
             first_name: d.firstName,
             last_name: d.lastName,
             email: d.email,
-            phone: d.phone,
+            phone: `${d.phonePrefix}${d.phone}`,
             professional_license_number: d.professionalLicenseNumber,
             company_name: d.companyName,
             account_type: d.accountType,

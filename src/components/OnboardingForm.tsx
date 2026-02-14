@@ -34,7 +34,7 @@ export default function OnboardingForm() {
     const nextStep = async () => {
         let fields: (keyof OnboardingData)[] = [];
         switch (currentStep) {
-            case 1: fields = ['firstName', 'lastName', 'email', 'phone', 'professionalLicenseNumber', 'companyName', 'accountType']; break;
+            case 1: fields = ['firstName', 'lastName', 'email', 'phonePrefix', 'phone', 'professionalLicenseNumber', 'companyName', 'accountType']; break;
             case 2: fields = ['vehicleCategory', 'vehicleModel', 'immatriculation', 'passengerCapacity', 'luggageCapacity']; break;
             case 3: fields = ['pricingModel', 'rate4h', 'rate8h', 'includedKm', 'extraKmPrice', 'depositPercent', 'paymentTiming', 'serviceArea']; break;
         }
@@ -80,7 +80,10 @@ export default function OnboardingForm() {
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Dossier transmis !</h2>
                 <p className="text-slate-500 mb-8">Votre candidature est en cours d'examen par notre équipe. Nous reviendrons vers vous très prochainement.</p>
-                <button onClick={() => window.location.reload()} className="px-8 py-3 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-colors">Terminer</button>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button onClick={() => setIsSuccess(false)} className="px-8 py-3 bg-slate-100 text-slate-600 font-medium rounded-xl hover:bg-slate-200 transition-colors">Modifier mes informations</button>
+                    <button onClick={() => window.location.reload()} className="px-8 py-3 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-colors">Terminer</button>
+                </div>
             </div>
         );
     }
@@ -110,10 +113,10 @@ export default function OnboardingForm() {
                             <>
                                 <p className="text-sm text-slate-500">Commençons par faire connaissance. Ces informations nous permettent de créer votre compte partenaire.</p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <InputField label="Votre prénom" name="firstName" register={register} error={errors.firstName} />
-                                    <InputField label="Votre nom" name="lastName" register={register} error={errors.lastName} />
+                                    <InputField label="prénom" name="firstName" register={register} error={errors.firstName} />
+                                    <InputField label="nom" name="lastName" register={register} error={errors.lastName} />
                                     <InputField label="Adresse e-mail pro" name="email" type="email" register={register} error={errors.email} />
-                                    <InputField label="Numéro de mobile" name="phone" type="tel" register={register} error={errors.phone} />
+                                    <PhoneInputField label="Numéro de mobile" name="phone" prefixName="phonePrefix" register={register} error={errors.phone} />
                                     <InputField label="Numéro de votre carte VTC" name="professionalLicenseNumber" register={register} error={errors.professionalLicenseNumber} />
                                     <InputField label="Nom de votre entreprise" name="companyName" register={register} error={errors.companyName} />
                                     <SelectField label="Quel est votre statut juridique ?" name="accountType" register={register} options={['Auto-entrepreneur', 'Société']} error={errors.accountType} />
@@ -191,6 +194,35 @@ const SelectField = ({ label, name, register, options, error }: any) => (
             <option value="">Sélectionner...</option>
             {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
         </select>
+        {error && <span className="text-xs text-red-500 font-medium">{error.message}</span>}
+    </div>
+);
+
+const PhoneInputField = ({ label, name, prefixName, register, error }: any) => (
+    <div className="flex flex-col space-y-1.5">
+        <label className="text-sm font-medium text-slate-700">{label}</label>
+        <div className="flex gap-2">
+            <select
+                {...register(prefixName)}
+                className="w-24 px-2 py-2 border border-slate-200 rounded-xl text-base md:text-sm outline-none focus:ring-2 focus:ring-slate-900 bg-white"
+            >
+                <option value="+33">FR (+33)</option>
+                <option value="+32">BE (+32)</option>
+                <option value="+41">CH (+41)</option>
+                <option value="+352">LU (+352)</option>
+                <option value="+44">UK (+44)</option>
+                <option value="+1">US (+1)</option>
+                <option value="+221">SN (+221)</option>
+                <option value="+225">CI (+225)</option>
+                <option value="+212">MA (+212)</option>
+            </select>
+            <input
+                {...register(name)}
+                type="tel"
+                placeholder="6 12 34 56 78"
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-base md:text-sm outline-none focus:ring-2 focus:ring-slate-900"
+            />
+        </div>
         {error && <span className="text-xs text-red-500 font-medium">{error.message}</span>}
     </div>
 );
